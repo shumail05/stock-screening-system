@@ -1,0 +1,17 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.streamlit/secrets.toml
+dist/
+build/
+*.spec
+logs/
+data/cache/
+.DS_Store
+.env
+.idea/
+.vscode/
+*.swp
+*.swo

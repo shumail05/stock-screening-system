@@ -1,0 +1,17 @@
+api:
+  broker: "angelone"
+  redirect_uri: "https://rebuilt-basin-siamese.ngrok-free.dev"
+
+screening:
+  price_min: 30
+  price_max: 500
+  min_bid_qty: 1000000
+  min_ask_qty: 1000000
+
+smma:
+  fast_period: 20
+  slow_period: 120
+
+timeframes:
+  quantity_windows: [5, 20, 60]
+  avg_price_windows: [20, 60]

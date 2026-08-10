@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+streamlit
+plotly
+requests
+python-dotenv
+pyyaml
+fyers-apiv2
+smartapi
