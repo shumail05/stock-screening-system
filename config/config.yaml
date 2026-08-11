@@ -1,6 +1,9 @@
 api:
-  broker: "angelone"
-  redirect_uri: "https://rebuilt-basin-siamese.ngrok-free.dev"
+  broker: "fyers"
+  client_id: "${FYERS_CLIENT_ID}"
+  secret_key: "${FYERS_SECRET_KEY}"
+  redirect_uri: "http://localhost:8080"
+  access_token: "${FYERS_ACCESS_TOKEN}"
 
 screening:
   price_min: 30

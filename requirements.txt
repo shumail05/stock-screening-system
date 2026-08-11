@@ -6,5 +6,5 @@ plotly
 requests
 python-dotenv
 pyyaml
-fyers-apiv2
+fyers-apiv3
 smartapi

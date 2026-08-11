@@ -8,7 +8,9 @@ dist/
 build/
 *.spec
 logs/
+*.log
 data/cache/
+data/model.pkl
 .DS_Store
 .env
 .idea/

@@ -52,6 +52,9 @@ class Dashboard:
                 'Avg LTP 60m': s['avg_ltp_60m'],
                 'ML Probability': s['ml_probability'],
                 'Recommendation': s['ml_recommendation'],
-                'Reason': s['ml_reason']
+                'Reason': s['ml_reason'],
+                'Buy Backtest': s.get('backtest_buy_profitable'),
+                'Sell Backtest': s.get('backtest_sell_profitable'),
+                'Backtest Reason': s.get('backtest_reason', '')
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
