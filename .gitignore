@@ -11,6 +11,9 @@ logs/
 *.log
 data/cache/
 data/model.pkl
+data/metrics.json
+data/training_history.json
+data/daily_data_log.csv
 .DS_Store
 .env
 .idea/

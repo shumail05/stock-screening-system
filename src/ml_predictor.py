@@ -1,13 +1,34 @@
+import os
+import json
+import pickle
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DIR = os.path.join(PROJECT_ROOT, 'data')
+MODEL_PATH = os.path.join(MODEL_DIR, 'model.pkl')
+METRICS_PATH = os.path.join(MODEL_DIR, 'metrics.json')
+HISTORY_PATH = os.path.join(MODEL_DIR, 'training_history.json')
 
 class MLPredictor:
     def __init__(self):
         self.model = RandomForestClassifier(n_estimators=100, random_state=42)
         self.is_trained = False
+        self.training_date = None
+        self.accuracy = 0.0
+        self.metrics = {
+            'total_signals': 0,
+            'avoided_signals': 0,
+            'profitable_signals': 0,
+            'loss_signals': 0,
+            'avoidance_rate': 0.0,
+            'profit_rate': 0.0,
+            'loss_rate': 0.0
+        }
 
     def calculate_rsi(self, prices, period=14):
         delta = prices.diff()
@@ -24,6 +45,9 @@ class MLPredictor:
         features['volume_ma'] = df['volume'].rolling(20).mean()
         features['price_change'] = df['ltp'].pct_change()
         features['volatility'] = df['ltp'].rolling(20).std()
+        if 'ltq' in df.columns:
+            features['ltq_ma'] = df['ltq'].rolling(20).mean()
+            features['ltq_ratio'] = df['ltq'] / (df['volume'].rolling(20).mean() + 1e-9)
         return features.dropna()
 
     def create_profitability_labels(self, df, holding_period=20):
@@ -44,7 +68,11 @@ class MLPredictor:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         self.model.fit(X_train, y_train)
         self.is_trained = True
-        return accuracy_score(y_test, self.model.predict(X_test))
+        self.training_date = datetime.now().isoformat()
+        self.accuracy = float(accuracy_score(y_test, self.model.predict(X_test)))
+        self._save_model()
+        self._update_metrics_history('train', self.accuracy)
+        return self.accuracy
 
     def predict_signal_quality(self, current_data):
         features = self.prepare_features(current_data)
@@ -75,6 +103,13 @@ class MLPredictor:
         elif feat['rsi'] < 30:
             score += 10
             reasons.append('RSI oversold')
+        if 'ltq_ma' in feat and feat['ltq_ma'] > 0:
+            if feat['ltq_ratio'] > 1.5:
+                score += 10
+                reasons.append('High LTQ relative to volume')
+            elif feat['ltq_ratio'] < 0.5:
+                score -= 10
+                reasons.append('Low LTQ relative to volume')
         if feat['volume_ma'] > df['volume'].rolling(20).mean().iloc[-1] * 1.5:
             score += 10
             reasons.append('Volume spike detected')
@@ -136,3 +171,89 @@ class MLPredictor:
             'sell_profitable': round(sell_profitable, 2) if sell_profitable is not None else None,
             'reason': '; '.join(reasons)
         }
+
+    def evaluate_crossover_signals(self, df, fast_period=20, slow_period=120, holding_period=20):
+        backtest = self.backtest_crossover(df, fast_period, slow_period, holding_period)
+        total = 0
+        avoided = 0
+        profitable = 0
+        losses = 0
+        if backtest.get('buy_profitable') is not None:
+            total += 1
+            if backtest['buy_profitable'] < 0.5:
+                avoided += 1
+            else:
+                profitable += 1
+        if backtest.get('sell_profitable') is not None:
+            total += 1
+            if backtest['sell_profitable'] < 0.5:
+                avoided += 1
+            else:
+                profitable += 1
+        if total == 0:
+            return {
+                'total_signals': 0,
+                'avoided_signals': 0,
+                'profitable_signals': 0,
+                'loss_signals': 0,
+                'avoidance_rate': 0.0,
+                'profit_rate': 0.0,
+                'loss_rate': 0.0,
+                'reason': 'No crossovers detected'
+            }
+        loss_signals = total - avoided - profitable
+        self.metrics = {
+            'total_signals': total,
+            'avoided_signals': avoided,
+            'profitable_signals': profitable,
+            'loss_signals': loss_signals,
+            'avoidance_rate': round(avoided / total * 100, 2),
+            'profit_rate': round(profitable / total * 100, 2),
+            'loss_rate': round(loss_signals / total * 100, 2)
+        }
+        self._save_metrics()
+        return self.metrics
+
+    def _save_model(self):
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        with open(MODEL_PATH, 'wb') as f:
+            pickle.dump(self, f)
+
+    def _save_metrics(self):
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        with open(METRICS_PATH, 'w') as f:
+            json.dump(self.metrics, f, indent=2)
+
+    def _update_metrics_history(self, event_type, value):
+        history = []
+        if os.path.exists(HISTORY_PATH):
+            with open(HISTORY_PATH, 'r') as f:
+                history = json.load(f)
+        history.append({
+            'timestamp': datetime.now().isoformat(),
+            'event': event_type,
+            'value': value,
+            'metrics': self.metrics
+        })
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        with open(HISTORY_PATH, 'w') as f:
+            json.dump(history, f, indent=2)
+
+    @classmethod
+    def load(cls):
+        if os.path.exists(MODEL_PATH):
+            with open(MODEL_PATH, 'rb') as f:
+                return pickle.load(f)
+        return cls()
+
+    def get_training_history(self):
+        if os.path.exists(HISTORY_PATH):
+            with open(HISTORY_PATH, 'r') as f:
+                return json.load(f)
+        return []
+
+    def get_current_metrics(self):
+        if os.path.exists(METRICS_PATH):
+            with open(METRICS_PATH, 'r') as f:
+                return json.load(f)
+        return self.metrics

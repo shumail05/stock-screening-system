@@ -103,13 +103,14 @@ class DataFetcher:
                 'bid_qty': random.randint(800000, 1500000),
                 'ask_price': round(base + 0.05, 2),
                 'ask_qty': random.randint(800000, 1500000),
-                'volume': random.randint(50000, 300000)
+                'volume': random.randint(50000, 300000),
+                'ltq': random.randint(1000, 50000)
             }
         if self.config['api']['broker'] == 'fyers':
             data = {"symbols": symbol}
             res = self._retry_call(self.fyers.quotes, data=data)
             if res.get('s') != 'ok' or not res.get('d'):
-                return {'ltp': 0, 'bid_price': 0, 'bid_qty': 0, 'ask_price': 0, 'ask_qty': 0, 'volume': 0}
+                return {'ltp': 0, 'bid_price': 0, 'bid_qty': 0, 'ask_price': 0, 'ask_qty': 0, 'volume': 0, 'ltq': 0}
             v = res['d'][0].get('v', {})
             return {
                 'ltp': v.get('lp', 0),
@@ -117,7 +118,8 @@ class DataFetcher:
                 'bid_qty': v.get('volume', 0),
                 'ask_price': v.get('ask', 0),
                 'ask_qty': v.get('volume', 0),
-                'volume': v.get('volume', 0)
+                'volume': v.get('volume', 0),
+                'ltq': v.get('ltq', 0)
             }
         data = {"exchange": "NSE", "symboltoken": symbol, "tradingsymbol": symbol}
         return self.smart.ltp(data)['data']
@@ -140,7 +142,8 @@ class DataFetcher:
                             'bid_qty': v.get('volume', 0),
                             'ask_price': v.get('ask', 0),
                             'ask_qty': v.get('volume', 0),
-                            'volume': v.get('volume', 0)
+                            'volume': v.get('volume', 0),
+                            'ltq': v.get('ltq', 0)
                         }
             return result
         return {sym: self.get_quote(sym) for sym in symbols}
@@ -215,22 +218,32 @@ class DataFetcher:
                 except Exception:
                     results[sym] = None
         return results
-        if self.config['api']['broker'] == 'fyers':
-            data = {
-                "symbol": symbol,
-                "resolution": "1",
-                "date_format": "1",
-                "range_from": (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d"),
-                "range_to": datetime.now().strftime("%Y-%m-%d"),
-                "cont_flag": "1"
+
+    def get_depth_data(self, symbol):
+        if self.use_mock:
+            q = self.get_quote(symbol)
+            return {
+                'ltq': random.randint(1000, 50000),
+                'bid_price': q['bid_price'],
+                'bid_qty': q['bid_qty'],
+                'ask_price': q['ask_price'],
+                'ask_qty': q['ask_qty']
             }
-            res = self.fyers.history(data=data)
-            df = pd.DataFrame(res['candles'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-            df['ltp'] = df['close']
-            return df
-        hist = self.smart.get_candle_data(symbol, 'NSE', 'ONE_MINUTE', 60)['data']
-        df = pd.DataFrame(hist, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-        df['ltp'] = df['close']
-        return df
+        if self.config['api']['broker'] == 'fyers':
+            data = {"symbol": symbol, "ohlcv_flag": "1"}
+            res = self._retry_call(self.fyers.depth, data=data)
+            if res.get('s') != 'ok' or not res.get('d'):
+                return {'ltq': 0, 'bid_price': 0, 'bid_qty': 0, 'ask_price': 0, 'ask_qty': 0}
+            d = res['d'].get(symbol, next(iter(res['d'].values())) if isinstance(res['d'], dict) else res['d'][0])
+            bids = d.get('bids', [])
+            asks = d.get('ask', [])
+            best_bid = bids[0] if bids else {'price': 0, 'volume': 0}
+            best_ask = asks[0] if asks else {'price': 0, 'volume': 0}
+            return {
+                'ltq': d.get('ltq', 0),
+                'bid_price': best_bid.get('price', 0),
+                'bid_qty': best_bid.get('volume', 0),
+                'ask_price': best_ask.get('price', 0),
+                'ask_qty': best_ask.get('volume', 0)
+            }
+        return {'ltq': 0, 'bid_price': 0, 'bid_qty': 0, 'ask_price': 0, 'ask_qty': 0}
