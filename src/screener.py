@@ -119,8 +119,8 @@ class StockScreener:
 
     def get_ml_analysis_summary(self):
         return {
-            'training_date': self.ml_predictor.training_date,
-            'accuracy': round(self.ml_predictor.accuracy * 100, 2),
-            'metrics': self.ml_predictor.get_current_metrics(),
-            'history': self.ml_predictor.get_training_history()
+            'training_date': getattr(self.ml_predictor, 'training_date', None),
+            'accuracy': round(getattr(self.ml_predictor, 'accuracy', 0.0) * 100, 2),
+            'metrics': self.ml_predictor.get_current_metrics() if hasattr(self.ml_predictor, 'get_current_metrics') else {},
+            'history': self.ml_predictor.get_training_history() if hasattr(self.ml_predictor, 'get_training_history') else []
         }
